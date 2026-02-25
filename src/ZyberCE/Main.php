@@ -12,12 +12,14 @@ use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\Config;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\item\enchantment\EnchantmentInstance;
+use pocketmine\item\enchantment\VanillaEnchantments;
+use pocketmine\item\ItemFlags;
 use pocketmine\Server;
 
 class Main extends PluginBase implements Listener {
 
     private Config $config;
-
     private array $enchants = [];
 
     public function onEnable(): void {
@@ -83,8 +85,8 @@ class Main extends PluginBase implements Listener {
                     return true;
                 }
 
-                if($level > $this->enchants[$enchantName]["max_level"]){
-                    $sender->sendMessage("§cMax level for this enchant is 1.");
+                if($level > 1){
+                    $sender->sendMessage("§cMax level for Driller is 1.");
                     return true;
                 }
 
@@ -94,28 +96,31 @@ class Main extends PluginBase implements Listener {
                     return true;
                 }
 
-                // Store enchant NBT
+                // Store custom enchant
                 $nbt = $item->getNamedTag();
                 $nbt->setInt("zyberce_" . $enchantName, $level);
-
-                // Hidden glow (no visible enchant)
-                $nbt->setByte("ench", 1);
-
                 $item->setNamedTag($nbt);
 
-                // Add lore (prevent duplicate stacking)
-                $lore = $item->getLore();
-                $enchantLine = "§r§6" . ucfirst($enchantName) . " I";
+                // Add real enchant for glow
+                $item->addEnchantment(
+                    new EnchantmentInstance(VanillaEnchantments::UNBREAKING(), 1)
+                );
 
-                if(!in_array($enchantLine, $lore)){
-                    $lore[] = $enchantLine;
+                // Hide enchant tooltip
+                $item->setFlags($item->getFlags() | ItemFlags::HIDE_ENCHANTS);
+
+                // Add lore safely
+                $lore = $item->getLore();
+                $line = "§r§6Driller I";
+                if(!in_array($line, $lore)){
+                    $lore[] = $line;
                     $item->setLore($lore);
                 }
 
                 $target->getInventory()->setItemInHand($item);
 
                 $sender->sendMessage(str_replace("{player}", $target->getName(), $this->config->get("enchant-success")));
-                $target->sendMessage("§aYour item has been enchanted with §6" . ucfirst($enchantName) . " I");
+                $target->sendMessage("§aYour item has been enchanted with §6Driller I");
 
             return true;
         }
@@ -146,7 +151,6 @@ class Main extends PluginBase implements Listener {
         $world = $block->getPosition()->getWorld();
         $center = $block->getPosition();
 
-        // 3x3x3 cube
         for($x = -1; $x <= 1; $x++){
             for($y = -1; $y <= 1; $y++){
                 for($z = -1; $z <= 1; $z++){
@@ -162,7 +166,6 @@ class Main extends PluginBase implements Listener {
                     $world->setBlock($targetPos, VanillaBlocks::AIR());
 
                     foreach($drops as $drop){
-
                         if($player->getInventory()->canAddItem($drop)){
                             $player->getInventory()->addItem($drop);
                         } else {
