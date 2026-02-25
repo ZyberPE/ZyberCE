@@ -1,9 +1,20 @@
-no-permission: "§cYou do not have permission to use this command."
+# ZyberCE Configuration
+# PocketMine-MP API 5.0.0
+# Author: Zyber
 
-enchant-success: "§aSuccessfully enchanted {player}'s item."
+messages:
 
-inventory-full: "§cYour inventory is full! Clear space to continue mining."
+  no-permission: "§cYou do not have permission to use this command."
 
-list-format:
-  - "§6§lZyber Custom Enchants"
-  - "§7Available Enchants:"
+  enchant-success: "§aSuccessfully enchanted {player}'s item with {enchant} {level}."
+
+  inventory-full: "§cYour inventory is full! Some blocks could not be added."
+
+  ce-usage:
+    - "§6§lZyberCE Commands"
+    - "§7/ce enchant <player> <enchant> <level>"
+    - "§7/ce list"
+
+  ce-list:
+    - "§6§lAvailable Enchants:"
+    - "§eDriller I §7- Breaks a 3x3x3 area of blocks."
