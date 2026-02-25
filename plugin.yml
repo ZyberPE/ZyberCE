@@ -2,7 +2,7 @@ name: ZyberCE
 main: ZyberCE\Main
 version: 1.0.0
 api: 5.0.0
-author: ZyberPE
+author: ZyberPEok
 description: Custom Enchants Plugin
 
 commands:
