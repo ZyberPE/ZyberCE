@@ -1,20 +1,6 @@
-# ZyberCE Configuration
-# PocketMine-MP API 5.0.0
-# Author: Zyber
-
 messages:
-
-  no-permission: "§cYou do not have permission to use this command."
-
-  enchant-success: "§aSuccessfully enchanted {player}'s item with {enchant} {level}."
-
-  inventory-full: "§cYour inventory is full! Some blocks could not be added."
-
-  ce-usage:
-    - "§6§lZyberCE Commands"
-    - "§7/ce enchant <player> <enchant> <level>"
-    - "§7/ce list"
-
-  ce-list:
-    - "§6§lAvailable Enchants:"
-    - "§eDriller I §7- Breaks a 3x3x3 area of blocks."
+  no-permission: "&cYou do not have permission to use this command!"
+  enchant-success: "&aSuccessfully applied the enchant to the item!"
+  ce-list-header: "&e==== Available Enchants ===="
+  ce-list-enchant-line: "&b{enchant} &7- {description} (Max Level: {max})"
+  ce-list-footer: "&e==========================="
