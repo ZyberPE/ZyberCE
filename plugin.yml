@@ -1,0 +1,16 @@
+name: ZyberCE
+main: ZyberCE\Main
+version: 1.0.0
+api: 5.0.0
+author: ZyberPE
+description: Custom Enchants Plugin
+
+commands:
+  ce:
+    description: Custom Enchant main command
+    usage: /ce
+    permission: ce.use
+
+permissions:
+  ce.use:
+    default: op
