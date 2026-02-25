@@ -1,0 +1,10 @@
+messages:
+  no-permission: "§cYou do not have permission to use this command."
+  enchant-success: "§aSuccessfully applied {enchant} to {player}'s item."
+  invalid-enchant: "§cThat enchant does not exist."
+  invalid-tool: "§cThis enchant is not compatible with that item."
+
+list-message:
+  - "§6===== Zyber Custom Enchants ====="
+  - "§eDriller I §7- Breaks blocks in a 3x3 area."
+  - "§6================================="
