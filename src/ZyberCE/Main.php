@@ -1,122 +1,90 @@
 <?php
 
-declare(strict_types=1);
-
 namespace ZyberCE;
 
 use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
-use pocketmine\command\Command;
-use pocketmine\command\CommandSender;
-use pocketmine\player\Player;
 use pocketmine\event\block\BlockBreakEvent;
+use pocketmine\player\Player;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
-use pocketmine\item\enchantment\VanillaEnchantments;
-use pocketmine\item\enchantment\EnchantmentInstance;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\world\Position;
+use pocketmine\nbt\tag\ByteTag;
+use pocketmine\block\Air;
 
 class Main extends PluginBase implements Listener {
 
-    private const TAG_DRILLER = "zyber_driller";
+    public const TAG_DRILLER = "driller";
 
-    protected function onEnable(): void {
+    public function onEnable(): void {
         $this->saveDefaultConfig();
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
     }
 
-    /* ------------------------------------------------ */
-    /* COMMAND */
-    /* ------------------------------------------------ */
-
-    public function onCommand(CommandSender $sender, Command $command, string $label, array $args): bool {
-
-        if (!$sender instanceof Player) return true;
+    public function onCommand(\pocketmine\command\CommandSender $sender, \pocketmine\command\Command $command, string $label, array $args): bool {
 
         if (!$sender->hasPermission("ce.use")) {
             $sender->sendMessage($this->getConfig()->get("messages")["no-permission"]);
             return true;
         }
 
-        if (!isset($args[0])) {
-            foreach ($this->getConfig()->get("messages")["ce-usage"] as $line) {
-                $sender->sendMessage($line);
-            }
-            return true;
-        }
+        if (count($args) === 0) return false;
 
-        switch (strtolower($args[0])) {
-
+        switch ($args[0]) {
             case "list":
-                foreach ($this->getConfig()->get("messages")["ce-list"] as $line) {
-                    $sender->sendMessage($line);
-                }
+                $list = $this->getConfig()->get("messages")["enchant-list"];
+                foreach ($list as $line) $sender->sendMessage($line);
                 return true;
 
             case "enchant":
-
-                if (!isset($args[1], $args[2], $args[3])) {
-                    $sender->sendMessage("§cUsage: /ce enchant <player> <enchant> <level>");
+                if (count($args) < 3) {
+                    $sender->sendMessage("Usage: /ce enchant <player> <enchant>");
                     return true;
                 }
 
-                $target = $this->getServer()->getPlayerByPrefix($args[1]);
-                if (!$target instanceof Player) {
-                    $sender->sendMessage("§cPlayer not found.");
-                    return true;
-                }
-
+                $playerName = $args[1];
                 $enchant = strtolower($args[2]);
-                $level = (int)$args[3];
 
-                if ($enchant === "driller" && $level === 1) {
-                    $item = $target->getInventory()->getItemInHand();
-                    if ($item->isNull()) {
-                        $sender->sendMessage("§cPlayer is not holding an item.");
-                        return true;
-                    }
-
-                    $this->applyDriller($item);
-                    $target->getInventory()->setItemInHand($item);
-
-                    $msg = $this->getConfig()->get("messages")["enchant-success"];
-                    $msg = str_replace(
-                        ["{player}", "{enchant}", "{level}"],
-                        [$target->getName(), "Driller", "1"],
-                        $msg
-                    );
-                    $sender->sendMessage($msg);
+                $player = $this->getServer()->getPlayerByPrefix($playerName);
+                if (!$player instanceof Player) {
+                    $sender->sendMessage("Player not found!");
+                    return true;
                 }
 
+                $item = $player->getInventory()->getItemInHand();
+                if ($item->isNull()) {
+                    $sender->sendMessage("Player is not holding an item!");
+                    return true;
+                }
+
+                $nbt = $item->getNamedTag();
+                switch ($enchant) {
+                    case "driller":
+                        $nbt->setByte(self::TAG_DRILLER, 1);
+                        break;
+                    default:
+                        $sender->sendMessage("Unknown enchant: $enchant");
+                        return true;
+                }
+
+                $item->setNamedTag($nbt);
+
+                // Glow like normal enchantment
+                $item->addEnchantment(VanillaItems::ENCHANTED_BOOK()->getEnchantment(0)); // Vanilla glow hack
+
+                // Add lore
+                $lore = $item->getLore();
+                if ($lore === null) $lore = [];
+                $lore[] = "§b$enchant";
+                $item->setLore($lore);
+
+                $player->getInventory()->setItemInHand($item);
+                $sender->sendMessage(str_replace(["{player}", "{enchant}"], [$player->getName(), ucfirst($enchant)], $this->getConfig()->get("messages")["enchant-success"]));
                 return true;
         }
 
-        return true;
+        return false;
     }
-
-    /* ------------------------------------------------ */
-    /* APPLY DRILLER */
-    /* ------------------------------------------------ */
-
-    private function applyDriller(Item $item): void {
-
-        $tag = $item->getNamedTag();
-        $tag->setByte(self::TAG_DRILLER, 1);
-        $item->setNamedTag($tag);
-
-        // Add glow safely (Efficiency 1 hidden)
-        $item->addEnchantment(new EnchantmentInstance(VanillaEnchantments::EFFICIENCY(), 1));
-
-        // Custom lore
-        $lore = $item->getLore();
-        $lore[] = "§r§bDriller I";
-        $item->setLore($lore);
-    }
-
-    /* ------------------------------------------------ */
-    /* BLOCK BREAK EVENT */
-    /* ------------------------------------------------ */
 
     public function onBreak(BlockBreakEvent $event): void {
 
@@ -124,9 +92,7 @@ class Main extends PluginBase implements Listener {
         $item = $player->getInventory()->getItemInHand();
         $tag = $item->getNamedTag();
 
-        if (!$tag->getTag(self::TAG_DRILLER)) {
-            return;
-        }
+        if (!$tag->getByte(self::TAG_DRILLER)) return;
 
         $event->cancel();
 
@@ -140,11 +106,11 @@ class Main extends PluginBase implements Listener {
                     $pos = $center->add($x, $y, $z);
                     $block = $world->getBlock($pos);
 
-                    if ($block->isAir()) continue;
+                    if ($block instanceof Air) continue;
 
                     $drops = $block->getDrops($item);
 
-                    $world->setBlock($pos, VanillaItems::AIR()->getBlock());
+                    $world->setBlock($pos, VanillaItems::AIR());
 
                     foreach ($drops as $drop) {
                         if (!$player->getInventory()->canAddItem($drop)) {
