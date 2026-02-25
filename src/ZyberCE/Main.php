@@ -6,35 +6,53 @@ use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\player\Player;
+use pocketmine\command\Command;
+use pocketmine\command\CommandSender;
 use pocketmine\item\Item;
-use pocketmine\item\VanillaItems;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ByteTag;
-use pocketmine\block\Air;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\StringTag;
 
 class Main extends PluginBase implements Listener {
 
-    public const TAG_DRILLER = "driller";
+    private array $enchants = [
+        "driller" => [
+            "description" => "Breaks a 3x3x3 area",
+            "max" => 1
+        ]
+    ];
 
     public function onEnable(): void {
         $this->saveDefaultConfig();
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
     }
 
-    public function onCommand(\pocketmine\command\CommandSender $sender, \pocketmine\command\Command $command, string $label, array $args): bool {
-
+    public function onCommand(CommandSender $sender, Command $command, string $label, array $args): bool {
+        if (!$sender instanceof Player) return false;
         if (!$sender->hasPermission("ce.use")) {
             $sender->sendMessage($this->getConfig()->get("messages")["no-permission"]);
             return true;
         }
 
-        if (count($args) === 0) return false;
+        if (count($args) === 0) {
+            $sender->sendMessage("/ce enchant <player> <enchant>");
+            $sender->sendMessage("/ce list");
+            return true;
+        }
 
-        switch ($args[0]) {
+        switch (strtolower($args[0])) {
             case "list":
-                $list = $this->getConfig()->get("messages")["enchant-list"];
-                foreach ($list as $line) $sender->sendMessage($line);
-                return true;
+                $sender->sendMessage($this->getConfig()->get("messages")["ce-list-header"]);
+                foreach ($this->enchants as $name => $data) {
+                    $line = str_replace(
+                        ["{enchant}", "{description}", "{max}"],
+                        [$name, $data["description"], $data["max"]],
+                        $this->getConfig()->get("messages")["ce-list-enchant-line"]
+                    );
+                    $sender->sendMessage($line);
+                }
+                $sender->sendMessage($this->getConfig()->get("messages")["ce-list-footer"]);
+                break;
 
             case "enchant":
                 if (count($args) < 3) {
@@ -42,82 +60,82 @@ class Main extends PluginBase implements Listener {
                     return true;
                 }
 
-                $playerName = $args[1];
-                $enchant = strtolower($args[2]);
+                $targetName = $args[1];
+                $enchantName = strtolower($args[2]);
 
-                $player = $this->getServer()->getPlayerByPrefix($playerName);
-                if (!$player instanceof Player) {
+                $target = $this->getServer()->getPlayerByPrefix($targetName);
+                if (!$target instanceof Player) {
                     $sender->sendMessage("Player not found!");
                     return true;
                 }
 
-                $item = $player->getInventory()->getItemInHand();
+                if (!isset($this->enchants[$enchantName])) {
+                    $sender->sendMessage("That enchant does not exist!");
+                    return true;
+                }
+
+                $item = $target->getInventory()->getItemInHand();
                 if ($item->isNull()) {
                     $sender->sendMessage("Player is not holding an item!");
                     return true;
                 }
 
                 $nbt = $item->getNamedTag();
-                switch ($enchant) {
-                    case "driller":
-                        $nbt->setByte(self::TAG_DRILLER, 1);
-                        break;
-                    default:
-                        $sender->sendMessage("Unknown enchant: $enchant");
-                        return true;
+                if (!$nbt->hasTag("ZyberCEEnchants", ListTag::class)) {
+                    $nbt->setTag("ZyberCEEnchants", new ListTag([], StringTag::class));
                 }
 
+                /** @var ListTag $list */
+                $list = $nbt->getListTag("ZyberCEEnchants");
+                $list->push(new StringTag($enchantName));
                 $item->setNamedTag($nbt);
 
-                // Glow like normal enchantment
-                $item->addEnchantment(VanillaItems::ENCHANTED_BOOK()->getEnchantment(0)); // Vanilla glow hack
+                // Make item glow (vanilla effect)
+                $item->setCustomName("§r" . $item->getName() . " ✨");
 
-                // Add lore
-                $lore = $item->getLore();
-                if ($lore === null) $lore = [];
-                $lore[] = "§b$enchant";
-                $item->setLore($lore);
-
-                $player->getInventory()->setItemInHand($item);
-                $sender->sendMessage(str_replace(["{player}", "{enchant}"], [$player->getName(), ucfirst($enchant)], $this->getConfig()->get("messages")["enchant-success"]));
-                return true;
+                $target->getInventory()->setItemInHand($item);
+                $sender->sendMessage($this->getConfig()->get("messages")["enchant-success"]);
+                break;
         }
 
-        return false;
+        return true;
     }
 
-    public function onBreak(BlockBreakEvent $event): void {
-
+    public function onBlockBreak(BlockBreakEvent $event): void {
         $player = $event->getPlayer();
         $item = $player->getInventory()->getItemInHand();
-        $tag = $item->getNamedTag();
+        $nbt = $item->getNamedTag();
 
-        if (!$tag->getByte(self::TAG_DRILLER)) return;
+        if (!$nbt->hasTag("ZyberCEEnchants", ListTag::class)) return;
 
-        $event->cancel();
+        $enchants = $nbt->getListTag("ZyberCEEnchants")->getValues();
 
+        if (in_array("driller", $enchants, true)) {
+            $this->break3x3x3($player, $event->getBlock()->getPosition());
+            $event->cancel(); // prevent default drops, handled manually
+        }
+    }
+
+    private function break3x3x3(Player $player, $center): void {
         $world = $player->getWorld();
-        $center = $event->getBlock()->getPosition();
+        $x0 = $center->x;
+        $y0 = $center->y;
+        $z0 = $center->z;
 
-        for ($x = -1; $x <= 1; $x++) {
-            for ($y = -1; $y <= 1; $y++) {
-                for ($z = -1; $z <= 1; $z++) {
-
-                    $pos = $center->add($x, $y, $z);
-                    $block = $world->getBlock($pos);
-
-                    if ($block instanceof Air) continue;
-
-                    $drops = $block->getDrops($item);
-
-                    $world->setBlock($pos, VanillaItems::AIR());
-
-                    foreach ($drops as $drop) {
-                        if (!$player->getInventory()->canAddItem($drop)) {
-                            $player->sendMessage($this->getConfig()->get("messages")["inventory-full"]);
-                            continue;
+        for ($x = $x0 - 1; $x <= $x0 + 1; $x++) {
+            for ($y = $y0 - 1; $y <= $y0 + 1; $y++) {
+                for ($z = $z0 - 1; $z <= $z0 + 1; $z++) {
+                    $block = $world->getBlockAt($x, $y, $z);
+                    if (!$block->isAir()) {
+                        $drops = $block->getDrops($player->getInventory()->getItemInHand());
+                        foreach ($drops as $drop) {
+                            if ($player->getInventory()->canAddItem($drop)) {
+                                $player->getInventory()->addItem($drop);
+                            } else {
+                                $world->dropItem($block->getPosition(), $drop);
+                            }
                         }
-                        $player->getInventory()->addItem($drop);
+                        $world->setBlockAt($x, $y, $z, $block->getPosition()->getWorld()->getBlockAt(0,0,0)); // air
                     }
                 }
             }
