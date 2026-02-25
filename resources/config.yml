@@ -2,6 +2,8 @@ no-permission: "§cYou do not have permission to use this command."
 
 enchant-success: "§aSuccessfully enchanted {player}'s item."
 
+inventory-full: "§cYour inventory is full! Clear space to continue mining."
+
 list-format:
   - "§6§lZyber Custom Enchants"
   - "§7Available Enchants:"
