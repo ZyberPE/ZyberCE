@@ -1,1 +1,1 @@
-# ZyberCE
+# ZyberCE Enchants
