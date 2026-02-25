@@ -12,15 +12,12 @@ use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\Config;
 use pocketmine\block\VanillaBlocks;
-use pocketmine\item\enchantment\EnchantmentInstance;
-use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\Server;
 
 class Main extends PluginBase implements Listener {
 
     private Config $config;
 
-    /** @var array<string, array> */
     private array $enchants = [];
 
     public function onEnable(): void {
@@ -30,7 +27,7 @@ class Main extends PluginBase implements Listener {
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
 
         $this->registerEnchant("driller", [
-            "description" => "Breaks a 3x3 area every time you mine.",
+            "description" => "Breaks a 3x3x3 cube every time you mine.",
             "max_level" => 1
         ]);
     }
@@ -97,26 +94,28 @@ class Main extends PluginBase implements Listener {
                     return true;
                 }
 
-                // ===== STORE NBT =====
+                // Store enchant NBT
                 $nbt = $item->getNamedTag();
                 $nbt->setInt("zyberce_" . $enchantName, $level);
+
+                // Hidden glow (no visible enchant)
+                $nbt->setByte("ench", 1);
+
                 $item->setNamedTag($nbt);
 
-                // ===== ADD LORE =====
+                // Add lore (prevent duplicate stacking)
                 $lore = $item->getLore();
-                $roman = $this->toRoman($level);
-                $lore[] = "§r§6" . ucfirst($enchantName) . " " . $roman;
-                $item->setLore($lore);
+                $enchantLine = "§r§6" . ucfirst($enchantName) . " I";
 
-                // ===== ADD GLOW =====
-                $item->addEnchantment(new EnchantmentInstance(
-                    VanillaEnchantments::UNBREAKING(), 1
-                ));
+                if(!in_array($enchantLine, $lore)){
+                    $lore[] = $enchantLine;
+                    $item->setLore($lore);
+                }
 
                 $target->getInventory()->setItemInHand($item);
 
                 $sender->sendMessage(str_replace("{player}", $target->getName(), $this->config->get("enchant-success")));
-                $target->sendMessage("§aYour item has been enchanted with §6" . ucfirst($enchantName) . " " . $roman);
+                $target->sendMessage("§aYour item has been enchanted with §6" . ucfirst($enchantName) . " I");
 
             return true;
         }
@@ -133,17 +132,6 @@ class Main extends PluginBase implements Listener {
         return null;
     }
 
-    private function toRoman(int $number): string {
-        return match($number){
-            1 => "I",
-            2 => "II",
-            3 => "III",
-            4 => "IV",
-            5 => "V",
-            default => (string)$number
-        };
-    }
-
     public function onBreak(BlockBreakEvent $event): void {
 
         $player = $event->getPlayer();
@@ -158,21 +146,30 @@ class Main extends PluginBase implements Listener {
         $world = $block->getPosition()->getWorld();
         $center = $block->getPosition();
 
+        // 3x3x3 cube
         for($x = -1; $x <= 1; $x++){
-            for($z = -1; $z <= 1; $z++){
+            for($y = -1; $y <= 1; $y++){
+                for($z = -1; $z <= 1; $z++){
 
-                $targetPos = $center->add($x, 0, $z);
-                $target = $world->getBlock($targetPos);
+                    $targetPos = $center->add($x, $y, $z);
+                    $target = $world->getBlock($targetPos);
 
-                if($target->getTypeId() === VanillaBlocks::AIR()->getTypeId()){
-                    continue;
-                }
+                    if($target->getTypeId() === VanillaBlocks::AIR()->getTypeId()){
+                        continue;
+                    }
 
-                $drops = $target->getDrops($item);
-                $world->setBlock($targetPos, VanillaBlocks::AIR());
+                    $drops = $target->getDrops($item);
+                    $world->setBlock($targetPos, VanillaBlocks::AIR());
 
-                foreach($drops as $drop){
-                    $player->getInventory()->addItem($drop);
+                    foreach($drops as $drop){
+
+                        if($player->getInventory()->canAddItem($drop)){
+                            $player->getInventory()->addItem($drop);
+                        } else {
+                            $player->sendMessage($this->config->get("inventory-full"));
+                            return;
+                        }
+                    }
                 }
             }
         }
