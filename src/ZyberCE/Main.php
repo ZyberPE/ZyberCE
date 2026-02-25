@@ -16,13 +16,17 @@ class Main extends PluginBase implements Listener {
 
     private const TAG_DRILLER = "zyber_driller";
 
-    /** @var array<string, bool> */
+    /** @var array<string,bool> */
     private array $breaking = [];
 
     protected function onEnable(): void {
         $this->saveDefaultConfig();
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
     }
+
+    /* ------------------------------------------------ */
+    /* ---------------- COMMAND SYSTEM ---------------- */
+    /* ------------------------------------------------ */
 
     public function onCommand(CommandSender $sender, Command $command, string $label, array $args): bool {
 
@@ -32,6 +36,9 @@ class Main extends PluginBase implements Listener {
         }
 
         if(!isset($args[0])){
+            foreach($this->getConfig()->get("help-message") as $line){
+                $sender->sendMessage($line);
+            }
             return true;
         }
 
@@ -39,22 +46,26 @@ class Main extends PluginBase implements Listener {
 
             case "enchant":
 
-                if(count($args) < 3){
+                if(count($args) < 4){
+                    $sender->sendMessage("§cUsage: /ce enchant <player> <enchant> <level>");
                     return true;
                 }
 
-                $target = $this->getServer()->getPlayerExact($args[1]);
+                $target = $this->getServer()->getPlayerByPrefix($args[1]);
                 if(!$target instanceof Player){
+                    $sender->sendMessage($this->getConfig()->get("messages")["player-not-found"]);
                     return true;
                 }
 
                 $enchant = strtolower($args[2]);
-                $item = $target->getInventory()->getItemInHand();
+                $level = (int)$args[3];
 
-                if($enchant !== "driller"){
+                if($enchant !== "driller" || $level !== 1){
                     $sender->sendMessage($this->getConfig()->get("messages")["invalid-enchant"]);
                     return true;
                 }
+
+                $item = $target->getInventory()->getItemInHand();
 
                 if(!$item instanceof Pickaxe){
                     $sender->sendMessage($this->getConfig()->get("messages")["invalid-tool"]);
@@ -65,29 +76,32 @@ class Main extends PluginBase implements Listener {
                 $nbt->setByte(self::TAG_DRILLER, 1);
                 $item->setNamedTag($nbt);
 
-                $item->setCustomName("§r§bDriller I " . $item->getName());
-
+                $item->setCustomName("§r§bDriller I §r" . $item->getName());
                 $target->getInventory()->setItemInHand($item);
 
-                $msg = str_replace(
-                    ["{enchant}", "{player}"],
-                    ["Driller I", $target->getName()],
+                $sender->sendMessage(str_replace(
+                    ["{enchant}", "{player}", "{level}"],
+                    ["Driller", $target->getName(), "I"],
                     $this->getConfig()->get("messages")["enchant-success"]
-                );
-
-                $sender->sendMessage($msg);
+                ));
 
             break;
 
             case "list":
+
                 foreach($this->getConfig()->get("list-message") as $line){
                     $sender->sendMessage($line);
                 }
+
             break;
         }
 
         return true;
     }
+
+    /* ------------------------------------------------ */
+    /* ---------------- DRILLER LOGIC ----------------- */
+    /* ------------------------------------------------ */
 
     public function onBreak(BlockBreakEvent $event): void {
 
@@ -98,43 +112,40 @@ class Main extends PluginBase implements Listener {
             return;
         }
 
-        $nbt = $item->getNamedTag();
-
-        if(!$nbt->getTag(self::TAG_DRILLER)){
+        if(!$item->getNamedTag()->getTag(self::TAG_DRILLER)){
             return;
         }
 
-        $playerName = $player->getName();
+        $name = $player->getName();
 
-        // Prevent infinite recursion
-        if(isset($this->breaking[$playerName])){
+        // Prevent recursion crash
+        if(isset($this->breaking[$name])){
             return;
         }
 
-        $this->breaking[$playerName] = true;
+        $this->breaking[$name] = true;
 
         $block = $event->getBlock();
         $world = $block->getPosition()->getWorld();
         $center = $block->getPosition();
 
+        // 3x3 FLAT AREA (horizontal)
         for($x = -1; $x <= 1; $x++){
-            for($y = -1; $y <= 1; $y++){
-                for($z = -1; $z <= 1; $z++){
+            for($z = -1; $z <= 1; $z++){
 
-                    if($x === 0 && $y === 0 && $z === 0){
-                        continue;
-                    }
+                if($x === 0 && $z === 0){
+                    continue;
+                }
 
-                    $targetPos = $center->add($x, $y, $z);
-                    $target = $world->getBlock($targetPos);
+                $pos = $center->add($x, 0, $z);
+                $target = $world->getBlock($pos);
 
-                    if(!$target->isAir()){
-                        $world->useBreakOn($targetPos, $item, $player);
-                    }
+                if(!$target->isAir()){
+                    $world->useBreakOn($pos, $item, $player);
                 }
             }
         }
 
-        unset($this->breaking[$playerName]);
+        unset($this->breaking[$name]);
     }
 }
