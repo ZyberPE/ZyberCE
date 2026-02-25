@@ -12,7 +12,8 @@ use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 use pocketmine\utils\Config;
 use pocketmine\block\VanillaBlocks;
-use pocketmine\item\Tool;
+use pocketmine\item\enchantment\EnchantmentInstance;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\Server;
 
 class Main extends PluginBase implements Listener {
@@ -28,7 +29,6 @@ class Main extends PluginBase implements Listener {
 
         $this->getServer()->getPluginManager()->registerEvents($this, $this);
 
-        // Register enchants (Expandable)
         $this->registerEnchant("driller", [
             "description" => "Breaks a 3x3 area every time you mine.",
             "max_level" => 1
@@ -92,20 +92,31 @@ class Main extends PluginBase implements Listener {
                 }
 
                 $item = $target->getInventory()->getItemInHand();
-
                 if($item->isNull()){
                     $sender->sendMessage("§cPlayer must hold an item.");
                     return true;
                 }
 
+                // ===== STORE NBT =====
                 $nbt = $item->getNamedTag();
                 $nbt->setInt("zyberce_" . $enchantName, $level);
                 $item->setNamedTag($nbt);
 
+                // ===== ADD LORE =====
+                $lore = $item->getLore();
+                $roman = $this->toRoman($level);
+                $lore[] = "§r§6" . ucfirst($enchantName) . " " . $roman;
+                $item->setLore($lore);
+
+                // ===== ADD GLOW =====
+                $item->addEnchantment(new EnchantmentInstance(
+                    VanillaEnchantments::UNBREAKING(), 1
+                ));
+
                 $target->getInventory()->setItemInHand($item);
 
                 $sender->sendMessage(str_replace("{player}", $target->getName(), $this->config->get("enchant-success")));
-                $target->sendMessage("§aYour item has been enchanted with §6" . ucfirst($enchantName) . " I");
+                $target->sendMessage("§aYour item has been enchanted with §6" . ucfirst($enchantName) . " " . $roman);
 
             return true;
         }
@@ -120,6 +131,17 @@ class Main extends PluginBase implements Listener {
             }
         }
         return null;
+    }
+
+    private function toRoman(int $number): string {
+        return match($number){
+            1 => "I",
+            2 => "II",
+            3 => "III",
+            4 => "IV",
+            5 => "V",
+            default => (string)$number
+        };
     }
 
     public function onBreak(BlockBreakEvent $event): void {
@@ -142,18 +164,13 @@ class Main extends PluginBase implements Listener {
                 $targetPos = $center->add($x, 0, $z);
                 $target = $world->getBlock($targetPos);
 
-                // Skip air
                 if($target->getTypeId() === VanillaBlocks::AIR()->getTypeId()){
                     continue;
                 }
 
-                // Get drops
                 $drops = $target->getDrops($item);
-
-                // Break block without double triggering
                 $world->setBlock($targetPos, VanillaBlocks::AIR());
 
-                // Add drops directly to inventory
                 foreach($drops as $drop){
                     $player->getInventory()->addItem($drop);
                 }
