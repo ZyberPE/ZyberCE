@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace ZyberCE;
 
 use pocketmine\plugin\PluginBase;
+use pocketmine\event\Listener;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
-use pocketmine\event\Listener;
 use pocketmine\event\block\BlockBreakEvent;
-use pocketmine\item\Item;
-use pocketmine\item\ToolTier;
 use pocketmine\item\Pickaxe;
-use pocketmine\world\Position;
 
 class Main extends PluginBase implements Listener {
 
-    const TAG_DRILLER = "zyber_driller";
+    private const TAG_DRILLER = "zyber_driller";
+
+    /** @var array<string, bool> */
+    private array $breaking = [];
 
     protected function onEnable(): void {
         $this->saveDefaultConfig();
@@ -43,39 +43,39 @@ class Main extends PluginBase implements Listener {
                     return true;
                 }
 
-                $player = $this->getServer()->getPlayerExact($args[1]);
-                if(!$player instanceof Player){
+                $target = $this->getServer()->getPlayerExact($args[1]);
+                if(!$target instanceof Player){
                     return true;
                 }
 
                 $enchant = strtolower($args[2]);
-                $item = $player->getInventory()->getItemInHand();
+                $item = $target->getInventory()->getItemInHand();
 
-                if($enchant === "driller"){
-
-                    if(!$item instanceof Pickaxe){
-                        $player->sendMessage($this->getConfig()->get("messages")["invalid-tool"]);
-                        return true;
-                    }
-
-                    $nbt = $item->getNamedTag();
-                    $nbt->setByte(self::TAG_DRILLER, 1);
-                    $item->setNamedTag($nbt);
-
-                    $item->setCustomName("§r§bDriller I " . $item->getName());
-
-                    $player->getInventory()->setItemInHand($item);
-
-                    $msg = str_replace(
-                        ["{enchant}", "{player}"],
-                        ["Driller I", $player->getName()],
-                        $this->getConfig()->get("messages")["enchant-success"]
-                    );
-
-                    $sender->sendMessage($msg);
-                } else {
+                if($enchant !== "driller"){
                     $sender->sendMessage($this->getConfig()->get("messages")["invalid-enchant"]);
+                    return true;
                 }
+
+                if(!$item instanceof Pickaxe){
+                    $sender->sendMessage($this->getConfig()->get("messages")["invalid-tool"]);
+                    return true;
+                }
+
+                $nbt = $item->getNamedTag();
+                $nbt->setByte(self::TAG_DRILLER, 1);
+                $item->setNamedTag($nbt);
+
+                $item->setCustomName("§r§bDriller I " . $item->getName());
+
+                $target->getInventory()->setItemInHand($item);
+
+                $msg = str_replace(
+                    ["{enchant}", "{player}"],
+                    ["Driller I", $target->getName()],
+                    $this->getConfig()->get("messages")["enchant-success"]
+                );
+
+                $sender->sendMessage($msg);
 
             break;
 
@@ -93,11 +93,25 @@ class Main extends PluginBase implements Listener {
 
         $player = $event->getPlayer();
         $item = $player->getInventory()->getItemInHand();
+
+        if(!$item instanceof Pickaxe){
+            return;
+        }
+
         $nbt = $item->getNamedTag();
 
         if(!$nbt->getTag(self::TAG_DRILLER)){
             return;
         }
+
+        $playerName = $player->getName();
+
+        // Prevent infinite recursion
+        if(isset($this->breaking[$playerName])){
+            return;
+        }
+
+        $this->breaking[$playerName] = true;
 
         $block = $event->getBlock();
         $world = $block->getPosition()->getWorld();
@@ -111,12 +125,16 @@ class Main extends PluginBase implements Listener {
                         continue;
                     }
 
-                    $target = $world->getBlock($center->add($x, $y, $z));
-                    if($target->getTypeId() !== 0){
-                        $world->useBreakOn($target->getPosition(), $item, $player);
+                    $targetPos = $center->add($x, $y, $z);
+                    $target = $world->getBlock($targetPos);
+
+                    if(!$target->isAir()){
+                        $world->useBreakOn($targetPos, $item, $player);
                     }
                 }
             }
         }
+
+        unset($this->breaking[$playerName]);
     }
 }
